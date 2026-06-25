@@ -1,0 +1,91 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: todo-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: todos
+      MYSQL_USER: todo
+      MYSQL_PASSWORD: todo
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - todo-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      target: backend-dev
+    container_name: todo-backend
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: todo
+      MYSQL_PASSWORD: todo
+      MYSQL_DB: todos
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - todo-network
+    ports:
+      - "3000:3000"
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/src
+          target: /app/src
+        - action: rebuild
+          path: ./backend/package.json
+
+  frontend:
+    build:
+      context: .
+      target: frontend-dev
+    container_name: todo-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - todo-network
+    ports:
+      - "3005:5173"
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/src
+        - action: sync
+          path: ./client/public
+          target: /app/public
+        - action: rebuild
+          path: ./client/package.json
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: todo-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - todo-network
+    ports:
+      - "8082:80"
+
+volumes:
+  mysql-data:
+
+networks:
+  todo-network:
+    driver: bridge
